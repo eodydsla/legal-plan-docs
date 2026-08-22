@@ -1,0 +1,107 @@
+// 환경분야 법정계획 — 계획 검색·원문 내려받기·관리자 CRUD
+//
+// 핵심 설계: 같은 계획은 하나의 EnvPlan 으로 관리하고, 차수는 EnvPlanEdition 으로 붙인다.
+// EnvPlan.code(EP-001)가 공통번호이고 차수는 EP-001-3 처럼 code 뒤에 순번을 붙여 식별한다.
+// 차수가 없는 계획(지자체가 개별 수립하는 것 등)도 EnvPlanEdition 한 행을 갖는다 —
+// "차수 없음"을 데이터 구멍이 아니라 confidence='해당없음' 인 명시적 값으로 두기 위해서다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// 법정계획 한 건. 차수가 여럿이어도 여기서는 한 행이다.
+model EnvPlan {
+  id   String @id @default(cuid())
+  /// 공통번호. 화면·CSV·ZIP 어디서든 이 값이 같으면 같은 계획이다 (예: EP-001)
+  code String @unique
+  seq  Int    @default(0) // 표시용 연번
+
+  name     String // 계획명
+  /// 계획부문 — 기본계획 | 종합계획 | 시행계획 | 관리계획 | 실시계획 | 세부계획 | 실천계획 | 기타
+  category String @default("기타")
+
+  law        String? // 근거법률
+  lawUrl     String? // 법령 본문 링크
+  article    String? // 근거조문
+  articleUrl String? // 조문 링크
+
+  cycle    String? // 갱신주기 (5년·10년·미규정 등)
+  ministry String? // 소관부처
+  planner  String? // 계획수립자 원문 표기
+  scope    String? // 공간범위 (전국·시도·시군구)
+
+  /// 차수 이력을 실제로 검증했는지. 미검증이면 화면에서 구분해 보여준다.
+  verified Boolean @default(false)
+  /// 출처 — neins(국토환경정보센터) | added(누락 발굴) | marine(해양수산부 소관)
+  source   String  @default("neins")
+  note     String? // 비고
+
+  published Boolean @default(true)
+  order     Int     @default(0)
+
+  editions  EnvPlanEdition[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([ministry])
+  @@index([source])
+}
+
+/// 계획의 한 차수. 제1차·제2차… 또는 '차수없음'/'제1~3차'(묶음) 같은 값도 들어간다.
+model EnvPlanEdition {
+  id     String  @id @default(cuid())
+  /// 차수 식별자 — 계획 공통번호 + 순번 (예: EP-001-3)
+  code   String  @unique
+  planId String
+  plan   EnvPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  seq   Int    @default(1) // 계획 안에서의 순서
+  label String? // 차수 표기 (제1차 / 차수없음 / 제1~3차)
+
+  period   String? // 계획기간 원문 표기 (2026~2030)
+  yearFrom Int? // 정렬·필터용
+  yearTo   Int?
+
+  /// 확인 | 참고 | 미확인 | 해당없음 — 근거를 못 찾으면 추정하지 않고 미확인으로 둔다
+  confidence String?
+  /// 현행 차수 여부. 계획당 하나만 true 인 것이 정상이다.
+  isCurrent  Boolean @default(false)
+
+  /// 원문 파일 — public/docs/ 안의 파일명. 시드가 실제 파일 존재를 확인해 hasDoc 을 채운다.
+  hasDoc  Boolean @default(false)
+  docFile String?
+  docSize Int?
+
+  sourceUrl String? // 출처 링크
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId])
+  @@index([confidence])
+}
+
+/// 사이트 문구·라벨. 코드에 문자열을 박지 않기 위해 DB에서 읽는다.
+model Config {
+  key   String @id
+  value String
+}
+
+/// 관리자 변경 이력
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  action    String
+  summary   String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}

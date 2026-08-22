@@ -1,0 +1,19 @@
+# Next.js / node
+web/node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
+
+# 로컬 DB·비밀값 — .env.example 만 커밋한다
+web/prisma/dev.db
+web/prisma/dev.db-journal
+web/.env
+
+# 원문 PDF 는 용량이 커서 저장소에 넣지 않는다 (public/docs/ 에 따로 배치)
+web/public/docs/*
+!web/public/docs/.gitkeep
+
+.DS_Store
+__pycache__/
+*.pyc
