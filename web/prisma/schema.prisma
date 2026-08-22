@@ -34,6 +34,9 @@ model EnvPlan {
   ministry String? // 소관부처
   planner  String? // 계획수립자 원문 표기
   scope    String? // 공간범위 (전국·시도·시군구)
+  /// 수립 층위 — 국가 | 유역·권역 | 광역(시·도) | 광역·기초 | 기초(시·군·구) | 개별시설·사업.
+  /// 조문에 적힌 계획수립자로 가른다. 공간범위는 원 데이터의 절반이 비어 있어 쓰지 않는다.
+  level    String  @default("국가")
 
   /// 차수 이력을 실제로 검증했는지. 미검증이면 화면에서 구분해 보여준다.
   verified Boolean @default(false)
@@ -49,6 +52,7 @@ model EnvPlan {
   updatedAt DateTime @updatedAt
 
   @@index([category])
+  @@index([level])
   @@index([ministry])
   @@index([source])
 }

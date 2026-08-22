@@ -38,6 +38,7 @@ export function toRow(p: PlanWithEditions) {
     ministry: p.ministry,
     planner: p.planner,
     scope: p.scope,
+    level: p.level,
     verified: p.verified,
     source: p.source,
     note: p.note,

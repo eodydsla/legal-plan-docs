@@ -45,6 +45,7 @@ async function main() {
         ministry: nil(r.ministry),
         planner: nil(r.planner),
         scope: nil(r.scope),
+        level: r.level || "국가",
         verified: bool(r.verified),
         source: r.source || "neins",
         note: nil(r.note),

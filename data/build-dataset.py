@@ -76,6 +76,56 @@ def ministry_of(planner, fallback=""):
     return "기타 수립주체"
 
 
+# 조문에 수립자가 안 적혀 있어 규칙으로 못 가르는 것만 손으로 지정한다
+LEVEL_OVERRIDE = {
+    "국가탄소중립녹색성장전략": "국가",          # 법 제7조 — 정부가 수립
+    "계획 및 대책": "광역(시·도)",              # 환경정책기본법 제38조제2항 — 시·도지사가 수립
+    # 물환경보전법 제49조 — 시행자가 세우고 장관이 승인하는 구조라 국가계획이 아니다.
+    # neins 의 수립자 표기(기후에너지환경부장관)는 승인권자를 적은 것으로 보인다.
+    "공공폐수처리시설 기본계획": "개별시설·사업",
+}
+
+
+def level_of(planner, ministry, name):
+    """계획을 수립 층위로 가른다 — 국가 / 유역·권역 / 광역 / 기초 / 개별시설·사업.
+
+    공간범위(neins의 unit)는 절반 넘게 비어 있어 쓸 수 없다. 조문에 적힌 계획수립자를 본다.
+    유역환경청장·지방환경관서의 장은 환경부 소속기관이지만 관할이 유역이라 국가와 나눴다.
+    """
+    if name in LEVEL_OVERRIDE:
+        return LEVEL_OVERRIDE[name]
+
+    p = (planner or "").strip()
+    m = (ministry or "").strip()
+
+    # 소속기관·집행주체가 먼저 걸러져야 한다 ('청장'이 국가 규칙에 잡히기 전에)
+    if any(h in p for h in ("유역환경청", "지방환경관서", "지방환경청")) or "유역물관리위원회" in p:
+        return "유역·권역"
+    if any(h in p for h in ("사업시행자", "설치자", "관리자", "관리청", "법인", "취약기관", "운영자")):
+        return "개별시설·사업"
+
+    if "지방자치단체의 장" in p or "지방위원회" in p:
+        return "광역·기초"
+
+    has_wide = any(h in p for h in ("시ㆍ도지사", "시·도지사", "특별시장", "광역시장", "도지사"))
+    has_basic = any(h in p for h in ("시장ㆍ군수", "시장·군수", "구청장", "군수"))
+    if has_wide and has_basic:
+        return "광역·기초"
+    if has_wide:
+        return "광역(시·도)"
+    if has_basic:
+        return "기초(시·군·구)"
+
+    if p in ("정부", "국가", "국무총리") or "장관" in p or "중앙행정기관" in p or "위원회" in p or "청장" in p:
+        return "국가"
+    # 수립자 표기가 없으면 검증에서 잡은 소관부처로 판단한다
+    if m and m not in ("미지정", "기타 수립주체", "지방자치단체"):
+        return "국가"
+    if not p and not m:
+        return "미상"
+    return "미상"
+
+
 def split_period(period):
     """'2026~2030' → (2026, 2030). '2021~' 처럼 열린 구간도 받는다."""
     if not period:
@@ -120,6 +170,7 @@ for d in V.data:
         "ministry": ministry_of(d.get("plan_dsgnr"), ver["ministry"] if ver else ""),
         "planner": (d.get("plan_dsgnr") or "").strip(),
         "scope": (d.get("unit") or "").strip(),
+        "level": level_of(d.get("plan_dsgnr"), ver["ministry"] if ver else "", name),
         "verified": "1" if ver else "",
         "source": "neins",
         "note": ver["note"] if ver else "",
@@ -173,6 +224,7 @@ def add_extra(rows, source):
             "category": "종합계획" if "종합" in name else "기본계획",
             "law": law.strip("「」"), "law_url": "", "article": article, "article_url": "",
             "cycle": cycle, "ministry": ministry, "planner": "", "scope": "",
+            "level": "국가",
             "verified": "1", "source": source, "note": note,
             "order": (CATEGORY_ORDER.get("기본계획", 9) * 1000) + n,
         })

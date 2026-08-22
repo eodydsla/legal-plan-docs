@@ -39,6 +39,7 @@ export interface PlanRow {
   cycle: string | null;
   ministry: string | null;
   scope: string | null;
+  level: string;
   planner: string | null;
   published: boolean;
   verified: boolean;
@@ -91,6 +92,7 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
   const [category, setCategory] = useState("all");
   const [ministry, setMinistry] = useState("all");
   const [conf, setConf] = useState("all");
+  const [level, setLevel] = useState("국가");
   const [onlyVerified, setOnlyVerified] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -114,13 +116,16 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
   const counts = useMemo(() => {
     const cat = new Map<string, number>();
     const min = new Map<string, number>();
+    const lvl = new Map<string, number>();
     for (const p of plans) {
+      lvl.set(p.level, (lvl.get(p.level) ?? 0) + 1);
       cat.set(p.category, (cat.get(p.category) ?? 0) + 1);
       const m = p.ministry?.trim() || "미지정";
       min.set(m, (min.get(m) ?? 0) + 1);
     }
     return {
       cat: [...cat.entries()].sort((a, b) => b[1] - a[1]),
+      lvl: [...lvl.entries()].sort((a, b) => b[1] - a[1]),
       min: [...min.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ko")),
     };
   }, [plans]);
@@ -129,6 +134,7 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
     const kw = q.trim().toLowerCase();
     return plans.filter((p) => {
       if (onlyVerified && !p.verified) return false;
+      if (level !== "all" && p.level !== level) return false;
       if (category !== "all" && p.category !== category) return false;
       if (ministry !== "all" && (p.ministry?.trim() || "미지정") !== ministry) return false;
       // 신뢰도는 차수에 붙어 있으므로 "그 신뢰도의 차수를 가진 계획"을 남긴다
@@ -142,9 +148,10 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
       }
       return true;
     });
-  }, [plans, q, category, ministry, conf, onlyVerified]);
+  }, [plans, q, category, ministry, conf, onlyVerified, level]);
 
-  const isAll = category === "all" && ministry === "all" && conf === "all" && !q.trim() && !onlyVerified;
+  const isAll =
+    level === "all" && category === "all" && ministry === "all" && conf === "all" && !q.trim() && !onlyVerified;
   const target = picked.size ? plans.filter((p) => picked.has(p.code)) : filtered;
   const codesParam = picked.size
     ? [...picked].join(",")
@@ -155,7 +162,7 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
   const targetDocs = target.reduce((n, p) => n + p.docCount, 0);
 
   const reset = () => {
-    setQ(""); setCategory("all"); setMinistry("all"); setConf("all"); setOnlyVerified(false);
+    setQ(""); setCategory("all"); setMinistry("all"); setConf("all"); setOnlyVerified(false); setLevel("all");
   };
 
   return (
@@ -179,6 +186,10 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
               <XIcon className="size-4" />
             </button>
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <Facet label="수립 층위" value={level} onChange={setLevel} options={counts.lvl} />
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
