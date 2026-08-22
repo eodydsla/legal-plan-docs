@@ -22,6 +22,33 @@ function read(name: string) {
   return parseCsv(fs.readFileSync(path.join(process.cwd(), "sheets", `${name}.csv`), "utf8"));
 }
 const num = (v: string) => (v?.trim() ? Number(v) : null);
+
+/** 계획명에서 식별력 있는 낱말만 남긴다 — 원문을 차수에 붙일지 판단하는 데 쓴다 */
+const GENERIC = /(기본계획|종합계획|종합대책|기본전략|기본방침|시행계획|관리계획|계획|대책|전략|시책|목표|국가|및|등에|관한)/g;
+function keyTokens(name: string): string[] {
+  return name
+    .replace(GENERIC, " ")
+    .split(/[\s·‧,()]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+}
+
+/**
+ * 파일명에서 읽은 차수를 계획의 차수에 붙일지 정한다.
+ * 차수 숫자만 맞으면 엉뚱한 계획의 보고서가 붙는다 — 실제로 '제1차 기후변화 대응 기본계획'이
+ * '제1차 국가 기후위기 적응대책' 자리에 붙었다. 계획명 낱말이 하나도 없으면 붙이지 않는다.
+ */
+function editionFor(
+  title: string,
+  planName: string,
+  editions: Map<string, string> | undefined,
+): string | null {
+  const m = title.match(/제\s*(\d+)\s*차/);
+  if (!m || !editions) return null;
+  const tokens = keyTokens(planName);
+  if (tokens.length && !tokens.some((t) => title.includes(t))) return null;
+  return editions.get(`제${m[1]}차`) ?? null;
+}
 const bool = (v: string) => ["1", "true", "TRUE", "Y", "y"].includes((v ?? "").trim());
 const nil = (v: string) => (v?.trim() ? v.trim() : null);
 
@@ -33,6 +60,7 @@ async function main() {
 
   const planRows = read("plans");
   const idByCode = new Map<string, string>();
+  const planNameByCode = new Map<string, string>();
 
   for (const r of planRows) {
     const p = await prisma.envPlan.create({
@@ -57,6 +85,7 @@ async function main() {
       },
     });
     idByCode.set(r.code, p.id);
+    planNameByCode.set(r.code, r.name);
   }
 
   const edRows = read("editions");
@@ -125,8 +154,7 @@ async function main() {
       seenFile.add(file);
 
       // 파일명에서 차수를 읽어 같은 차수가 있을 때만 연결한다 (없으면 계획 단위 자료)
-      const m = a.attFileName.match(/제\s*(\d+)\s*차/);
-      const editionId = m ? edByPlan.get(code)?.get(`제${m[1]}차`) ?? null : null;
+      const editionId = editionFor(a.attFileName, planNameByCode.get(code) ?? "", edByPlan.get(code));
 
       await prisma.envPlanDoc.create({
         data: {
@@ -157,8 +185,11 @@ async function main() {
       const abs = path.join(DOC_DIR, r.file);
       if (!planId || !fs.existsSync(abs) || seenFile.has(r.file)) continue;
       seenFile.add(r.file);
-      const m = r.title.match(/제\s*(\d+)\s*차/);
-      const editionId = m ? edByPlan.get(r.plan_code)?.get(`제${m[1]}차`) ?? null : null;
+      const editionId = editionFor(
+        r.title,
+        planNameByCode.get(r.plan_code) ?? "",
+        edByPlan.get(r.plan_code),
+      );
       await prisma.envPlanDoc.create({
         data: {
           planId,

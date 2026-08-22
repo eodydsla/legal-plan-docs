@@ -45,10 +45,26 @@ TARGETS = {
     "EP-136": ("멸종위기 야생생물", ["멸종위기", "보전대책"]),
     "EP-034": ("녹색융합클러스터", ["녹색융합클러스터", "기본계획"]),
     "EP-138": ("순환경제", ["순환경제", "목표"]),
+    # 국가 기후위기 적응대책 — 차수마다 명칭이 달라 한 검색어로는 다 안 걸린다
+    "EP-013": ("기후위기 적응", ["기후위기", "적응"]),
+    "EP-013b": ("기후변화 적응대책", ["기후변화", "적응대책"]),
+    "EP-013c": ("국가기후변화적응대책", ["적응대책"]),
 }
+
+# 같은 계획을 여러 검색어로 훑을 때 결과를 하나로 모은다
+CODE_ALIAS = {"EP-013b": "EP-013", "EP-013c": "EP-013"}
 
 # 안내문·현황자료가 아니라 계획 원문을 받으려는 것이다. 이보다 작으면 버린다.
 MIN_SIZE = 100_000
+
+# 차수별로 게시글이 따로 있어 첫 글에서 멈추면 안 되는 계획
+MULTI_POST = {"EP-013", "EP-013b", "EP-013c"}
+
+# 계획 원문이 아니라 이행점검 산출물이다 — 계획 자료로 붙이면 목록이 지저분해진다
+DROP_WORDS = ("점검결과", "점검 결과", "추진상황", "실적", "평가결과")
+
+# 제목에 이 말이 있으면 다른 계획 소속이다 (적응대책 → 적응대책세부시행계획)
+REROUTE = {"세부시행계획": {"EP-013": "EP-014"}}
 
 os.makedirs(DOCS, exist_ok=True)
 os.makedirs(CACHE, exist_ok=True)
@@ -109,19 +125,34 @@ for code, (kw, must) in TARGETS.items():
                 continue
             # 파일명이 '2007.hwp' 처럼 의미가 없으면 게시글 제목을 쓴다
             label = fname if re.search(r"[가-힣]{3,}", fname.rsplit(".", 1)[0]) else f"{title}.{ext}"
+            if any(w in label or w in title for w in DROP_WORDS):
+                if os.path.exists(path):
+                    os.remove(path)
+                continue
+            target = CODE_ALIAS.get(code, code)
+            for word, table in REROUTE.items():
+                if word in label and target in table:
+                    target = table[target]
             rows.append({
-                "plan_code": code, "title": label, "file": stored, "ext": ext,
+                "plan_code": target, "title": label, "file": stored, "ext": ext,
                 "size": size, "source_url": url, "post_title": title,
             })
             hit += 1
-        if hit:
-            break  # 계획당 첫 유효 게시글만 (최신순이라 맨 앞이 최신 차수다)
+        # 차수별로 글이 따로 올라오는 계획은 여러 글을 훑는다
+        if hit and code not in MULTI_POST:
+            break  # 그 외에는 첫 유효 게시글만 (최신순이라 맨 앞이 최신 차수다)
     print("%s %-22s %d건" % (code, kw[:20], hit))
 
+# 일부 코드만 돌렸을 때 나머지 결과를 잃지 않도록 기존 파일과 합친다
+fields = ["plan_code", "title", "file", "ext", "size", "source_url", "post_title"]
+old = list(csv.DictReader(open(OUT, encoding="utf-8"))) if os.path.exists(OUT) else []
+ran = {CODE_ALIAS.get(c, c) for c in (only or TARGETS)}
+kept = [r for r in old if r["plan_code"] not in ran]  # 이번에 다시 받은 계획만 갈아끼운다
+merged = kept + rows
 with open(OUT, "w", encoding="utf-8", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=["plan_code", "title", "file", "ext", "size", "source_url", "post_title"])
+    w = csv.DictWriter(f, fieldnames=fields)
     w.writeheader()
-    w.writerows(rows)
+    w.writerows(merged)
 
-print("총 %d건 · %.2fGB → %s" % (
-    len(rows), sum(r["size"] for r in rows) / 1e9, os.path.relpath(OUT, HERE)))
+print("이번 %d건 · 누적 %d건 · %.2fGB → %s" % (
+    len(rows), len(merged), sum(int(r["size"]) for r in merged) / 1e9, os.path.relpath(OUT, HERE)))

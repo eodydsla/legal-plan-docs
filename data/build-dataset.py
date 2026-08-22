@@ -154,6 +154,10 @@ for d in V.data:
     idx = d["idx"]
     ver = verified_by_idx.get(idx)
     name = V.NAME_FIX.get(ver["no"], d["plan"].strip()) if ver else d["plan"].strip()
+    # 58건 밖이지만 차수를 검증한 계획 (계획부문이 '대책'이라 분류에서 빠진 것들)
+    if not ver and name in getattr(V, "EXTRA_VERIFIED", {}):
+        cyc, min_, hist_, note_ = V.EXTRA_VERIFIED[name]
+        ver = dict(no=None, cycle=cyc, ministry=min_, hist=hist_, note=note_)
     atts = V.files.get(idx, [])
 
     plans.append({
