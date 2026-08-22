@@ -14,7 +14,10 @@ export async function getPlans({ includeUnpublished = false } = {}) {
   return prisma.envPlan.findMany({
     where: includeUnpublished ? {} : { published: true },
     orderBy: [{ order: "asc" }, { seq: "asc" }],
-    include: { editions: { orderBy: { seq: "asc" } } },
+    include: {
+      editions: { orderBy: { seq: "asc" }, include: { docs: { orderBy: { order: "asc" } } } },
+      docs: { where: { editionId: null }, orderBy: { order: "asc" } },
+    },
   });
 }
 
@@ -46,7 +49,9 @@ export function toRow(p: PlanWithEditions) {
     currentLabel: current?.label ?? null,
     currentPeriod: current?.period ?? null,
     editionCount: p.editions.length,
-    docCount: p.editions.filter((e) => e.hasDoc).length,
+    docCount: p.docs.length + p.editions.reduce((n, e) => n + e.docs.length, 0),
+    /** 차수에 붙지 않은 계획 단위 자료 — 차수 표기가 없거나 검증 차수와 어긋난 것들 */
+    docs: p.docs.map(toDoc),
     editions: p.editions.map((e) => ({
       id: e.id,
       code: e.code,
@@ -57,13 +62,15 @@ export function toRow(p: PlanWithEditions) {
       yearTo: e.yearTo,
       confidence: e.confidence,
       isCurrent: e.isCurrent,
-      hasDoc: e.hasDoc,
-      docFile: e.docFile,
-      docSize: e.docSize,
       sourceUrl: e.sourceUrl,
       note: e.note,
+      docs: e.docs.map(toDoc),
     })),
   };
+}
+
+function toDoc(d: { id: string; title: string; file: string; ext: string; size: number; sourceUrl: string | null }) {
+  return { id: d.id, title: d.title, file: d.file, ext: d.ext, size: d.size, sourceUrl: d.sourceUrl };
 }
 
 export type PlanRow = ReturnType<typeof toRow>;

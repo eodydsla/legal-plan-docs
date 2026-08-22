@@ -12,6 +12,9 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { parseCsv } from "../src/lib/csv";
 
+/** 국토환경정보센터 첨부 목록 — data/fetch-docs.py 가 받아 둔 파일과 짝을 맞춘다 */
+type Att = { attFilePath: string; attFileName: string; ext?: string };
+
 const prisma = new PrismaClient();
 const DOC_DIR = path.join(process.cwd(), "public", "docs");
 
@@ -23,6 +26,7 @@ const bool = (v: string) => ["1", "true", "TRUE", "Y", "y"].includes((v ?? "").t
 const nil = (v: string) => (v?.trim() ? v.trim() : null);
 
 async function main() {
+  await prisma.envPlanDoc.deleteMany();
   await prisma.envPlanEdition.deleteMany();
   await prisma.envPlan.deleteMany();
   await prisma.config.deleteMany();
@@ -56,26 +60,16 @@ async function main() {
   }
 
   const edRows = read("editions");
-  let withDoc = 0;
+  /** 계획코드 → (차수표기 → 차수id). 원문을 차수에 붙일 때 쓴다. */
+  const edByPlan = new Map<string, Map<string, string>>();
+
   for (const r of edRows) {
     const planId = idByCode.get(r.plan_code);
     if (!planId) {
       console.warn(`  ! ${r.code}: 계획 ${r.plan_code} 없음 — 건너뜀`);
       continue;
     }
-    // 원문은 CSV의 파일명이 아니라 실제 파일 존재로 판정한다
-    let hasDoc = false;
-    let docSize: number | null = null;
-    const base = r.doc_file?.trim() ? path.basename(r.doc_file.trim()) : "";
-    if (base) {
-      const abs = path.join(DOC_DIR, base);
-      if (fs.existsSync(abs)) {
-        hasDoc = true;
-        docSize = fs.statSync(abs).size;
-        withDoc++;
-      }
-    }
-    await prisma.envPlanEdition.create({
+    const ed = await prisma.envPlanEdition.create({
       data: {
         code: r.code,
         planId,
@@ -86,13 +80,71 @@ async function main() {
         yearTo: num(r.year_to),
         confidence: nil(r.confidence),
         isCurrent: bool(r.is_current),
-        hasDoc,
-        docFile: hasDoc ? base : null,
-        docSize,
         sourceUrl: nil(r.source_url),
         note: nil(r.note),
       },
     });
+    if (r.label) {
+      if (!edByPlan.has(r.plan_code)) edByPlan.set(r.plan_code, new Map());
+      edByPlan.get(r.plan_code)!.set(r.label.trim(), ed.id);
+    }
+  }
+
+  // ── 원문 ──────────────────────────────────────────
+  // 첨부 목록의 neins idx 를 계획코드로 되돌린다
+  // (build-dataset.py 가 list.json 순서대로 EP-001..EP-150 을 매겼다).
+  const raw = path.join(process.cwd(), "..", "data", "raw");
+  const listJson = JSON.parse(fs.readFileSync(path.join(raw, "legal-plan-list.json"), "utf8")) as {
+    response: { data: { idx: number }[] };
+  };
+  const idxToCode = new Map<number, string>();
+  listJson.response.data.forEach((d, i) => idxToCode.set(d.idx, `EP-${String(i + 1).padStart(3, "0")}`));
+
+  const attJson = JSON.parse(fs.readFileSync(path.join(raw, "legal-plan-files.json"), "utf8")) as Record<
+    string,
+    Att[]
+  >;
+
+  let withDoc = 0;
+  let missing = 0;
+  const seenFile = new Set<string>();
+
+  for (const [idxStr, atts] of Object.entries(attJson)) {
+    const code = idxToCode.get(Number(idxStr));
+    const planId = code ? idByCode.get(code) : undefined;
+    if (!planId || !code) continue;
+
+    for (const [i, a] of atts.entries()) {
+      const file = `${a.attFilePath}.${a.ext || "pdf"}`;
+      if (seenFile.has(file)) continue; // 같은 파일이 여러 계획에 붙은 경우 첫 계획에만 단다
+      const abs = path.join(DOC_DIR, file);
+      if (!fs.existsSync(abs) || fs.statSync(abs).size === 0) {
+        missing++;
+        continue;
+      }
+      seenFile.add(file);
+
+      // 파일명에서 차수를 읽어 같은 차수가 있을 때만 연결한다 (없으면 계획 단위 자료)
+      const m = a.attFileName.match(/제\s*(\d+)\s*차/);
+      const editionId = m ? edByPlan.get(code)?.get(`제${m[1]}차`) ?? null : null;
+
+      await prisma.envPlanDoc.create({
+        data: {
+          planId,
+          editionId,
+          title: a.attFileName,
+          file,
+          ext: a.ext || "pdf",
+          size: fs.statSync(abs).size,
+          sourceUrl: `https://data.neins.go.kr/kei/legalPlan/file/${a.attFilePath}`,
+          order: i,
+        },
+      });
+      withDoc++;
+    }
+  }
+  if (missing) {
+    console.log(`  원문 파일 없음 ${missing}건 — 필요하면 python3 ../data/fetch-docs.py --all`);
   }
 
   await prisma.config.createMany({
@@ -106,7 +158,10 @@ async function main() {
     ],
   });
 
-  console.log(`계획 ${planRows.length}건 · 차수 ${edRows.length}건 (원문 확보 ${withDoc}건)`);
+  const linked = await prisma.envPlanDoc.count({ where: { editionId: { not: null } } });
+  console.log(
+    `계획 ${planRows.length}건 · 차수 ${edRows.length}건 · 원문 ${withDoc}건 (차수 연결 ${linked}건)`,
+  );
 }
 
 main()

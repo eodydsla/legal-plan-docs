@@ -17,13 +17,13 @@ export async function GET(req: Request) {
 
   const headers = [
     "공통번호", "연번", "계획명", "계획부문", "근거법률", "근거조문",
-    "차수번호", "차수", "계획기간", "갱신주기", "소관부처", "신뢰도", "현행", "원문", "출처", "비고",
+    "차수번호", "차수", "계획기간", "갱신주기", "소관부처", "신뢰도", "현행", "원문수", "출처", "비고",
   ];
   const body = rows.flatMap((p) =>
     p.editions.map((e) => [
       p.code, p.seq, p.name, p.category, p.law ? `「${p.law}」` : "", p.article ?? "",
       e.code, e.label ?? "", e.period ?? "", p.cycle ?? "", p.ministry ?? "",
-      e.confidence ?? "", e.isCurrent ? "현행" : "", e.hasDoc ? "O" : "",
+      e.confidence ?? "", e.isCurrent ? "현행" : "", e.docs.length || "",
       p.source, p.note ?? "",
     ]),
   );

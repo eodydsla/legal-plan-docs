@@ -48,6 +48,7 @@ model EnvPlan {
   order     Int     @default(0)
 
   editions  EnvPlanEdition[]
+  docs      EnvPlanDoc[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -77,19 +78,38 @@ model EnvPlanEdition {
   /// 현행 차수 여부. 계획당 하나만 true 인 것이 정상이다.
   isCurrent  Boolean @default(false)
 
-  /// 원문 파일 — public/docs/ 안의 파일명. 시드가 실제 파일 존재를 확인해 hasDoc 을 채운다.
-  hasDoc  Boolean @default(false)
-  docFile String?
-  docSize Int?
-
   sourceUrl String? // 출처 링크
   note      String?
 
+  docs      EnvPlanDoc[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([planId])
   @@index([confidence])
+}
+
+/// 원문 파일. 계획에 붙이고 차수는 선택적으로 연결한다 — 이유는 prisma/docs-model.md 참조.
+model EnvPlanDoc {
+  id     String  @id @default(cuid())
+  planId String
+  plan   EnvPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  /// 차수를 특정할 수 있을 때만 채운다. 못 붙이면 계획 단위 자료로 남는다.
+  editionId String?
+  edition   EnvPlanEdition? @relation(fields: [editionId], references: [id], onDelete: SetNull)
+
+  title String // 사람이 읽는 이름 (원 첨부 파일명)
+  /// public/docs/ 안의 실제 파일명. 원 파일명이 한글이고 중복이 있어 파일ID로 저장한다.
+  file  String  @unique
+  ext   String  @default("pdf")
+  size  Int     @default(0)
+
+  sourceUrl String? // 원 다운로드 주소
+  order     Int     @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([planId])
+  @@index([editionId])
 }
 
 /// 사이트 문구·라벨. 코드에 문자열을 박지 않기 위해 DB에서 읽는다.

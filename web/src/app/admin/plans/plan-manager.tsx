@@ -242,45 +242,50 @@ function EditionDoc({
   pending: boolean;
   run: ReturnType<typeof useAction>["run"];
 }) {
-  if (edition.hasDoc && edition.docFile) {
-    return (
-      <span className="flex items-center gap-1">
-        <a href={`/docs/${encodeURIComponent(edition.docFile)}`} className="text-xs text-primary hover:underline">
-          {edition.docFile.slice(0, 24)}…
-        </a>
-        <button
-          disabled={pending}
-          onClick={() => {
-            if (!confirm("원문 파일을 지웁니다. 계속할까요?")) return;
-            run(deleteEditionDoc, fd({ id: edition.id }));
-          }}
-          className="rounded p-0.5 text-muted-foreground hover:bg-muted"
-          aria-label="원문 삭제"
-        >
-          <FileXIcon className="size-3.5" />
-        </button>
-      </span>
-    );
-  }
   return (
-    <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-      <UploadIcon className="size-3.5" />
-      올리기
-      <input
-        type="file"
-        className="hidden"
-        disabled={pending}
-        onChange={(ev) => {
-          const file = ev.target.files?.[0];
-          if (!file) return;
-          const f = new FormData();
-          f.set("id", edition.id);
-          f.set("file", file);
-          run(uploadEditionDoc, f);
-          ev.target.value = "";
-        }}
-      />
-    </label>
+    <div className="flex flex-col gap-0.5">
+      {edition.docs.map((d) => (
+        <span key={d.id} className="flex items-center gap-1">
+          <a
+            href={`/docs/${encodeURIComponent(d.file)}`}
+            download={d.title}
+            className="text-xs text-primary hover:underline"
+            title={d.title}
+          >
+            {d.title.length > 26 ? d.title.slice(0, 26) + "…" : d.title}
+          </a>
+          <button
+            disabled={pending}
+            onClick={() => {
+              if (!confirm(`${d.title} 을(를) 지웁니다. 계속할까요?`)) return;
+              run(deleteEditionDoc, fd({ id: d.id }));
+            }}
+            className="rounded p-0.5 text-muted-foreground hover:bg-muted"
+            aria-label="원문 삭제"
+          >
+            <FileXIcon className="size-3.5" />
+          </button>
+        </span>
+      ))}
+      <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <UploadIcon className="size-3.5" />
+        올리기
+        <input
+          type="file"
+          className="hidden"
+          disabled={pending}
+          onChange={(ev) => {
+            const file = ev.target.files?.[0];
+            if (!file) return;
+            const f = new FormData();
+            f.set("id", edition.id);
+            f.set("file", file);
+            run(uploadEditionDoc, f);
+            ev.target.value = "";
+          }}
+        />
+      </label>
+    </div>
   );
 }
 

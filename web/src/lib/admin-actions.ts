@@ -186,7 +186,7 @@ function safeName(name: string) {
 export async function uploadEditionDoc(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   if (!(await isAdmin())) return { ok: false, message: "권한이 없습니다." };
 
-  const id = str(fd, "id");
+  const id = str(fd, "id"); // 차수 id
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, message: "파일을 고르세요." };
@@ -194,37 +194,42 @@ export async function uploadEditionDoc(_prev: ActionResult | null, fd: FormData)
   const ed = await prisma.envPlanEdition.findUnique({ where: { id }, include: { plan: true } });
   if (!ed) return { ok: false, message: "차수를 찾을 수 없습니다." };
 
-  const ext = path.extname(file.name) || ".pdf";
-  const base = safeName(`${ed.code}_${ed.plan.name}${ed.label ? `_${ed.label}` : ""}${ext}`);
+  const ext = (path.extname(file.name) || ".pdf").replace(".", "");
+  // 저장 이름은 충돌하지 않게 차수코드 기준으로 만들고, 사람이 읽는 이름은 title 에 둔다
+  const base = safeName(`${ed.code}_${Date.now()}.${ext}`);
   const abs = path.join(DOC_DIR, base);
   if (!abs.startsWith(DOC_DIR + path.sep)) return { ok: false, message: "잘못된 경로입니다." };
 
   fs.mkdirSync(DOC_DIR, { recursive: true });
   fs.writeFileSync(abs, Buffer.from(await file.arrayBuffer()));
 
-  await prisma.envPlanEdition.update({
-    where: { id },
-    data: { hasDoc: true, docFile: base, docSize: fs.statSync(abs).size },
+  await prisma.envPlanDoc.create({
+    data: {
+      planId: ed.planId,
+      editionId: ed.id,
+      title: file.name,
+      file: base,
+      ext,
+      size: fs.statSync(abs).size,
+    },
   });
-  await log("EnvPlanEdition", id, "upload", base);
+  await log("EnvPlanDoc", ed.id, "upload", `${ed.code} ${file.name}`);
   done();
-  return { ok: true, message: `${base} 를 올렸습니다.` };
+  return { ok: true, message: `${file.name} 을(를) 올렸습니다.` };
 }
 
+/** 원문 한 건 삭제. fd 의 id 는 EnvPlanDoc.id 다. */
 export async function deleteEditionDoc(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   if (!(await isAdmin())) return { ok: false, message: "권한이 없습니다." };
   const id = str(fd, "id");
-  const ed = await prisma.envPlanEdition.findUnique({ where: { id } });
-  if (!ed?.docFile) return { ok: false, message: "지울 원문이 없습니다." };
+  const doc = await prisma.envPlanDoc.findUnique({ where: { id } });
+  if (!doc) return { ok: false, message: "원문을 찾을 수 없습니다." };
 
-  const abs = path.join(DOC_DIR, path.basename(ed.docFile));
+  const abs = path.join(DOC_DIR, path.basename(doc.file));
   if (abs.startsWith(DOC_DIR + path.sep) && fs.existsSync(abs)) fs.unlinkSync(abs);
 
-  await prisma.envPlanEdition.update({
-    where: { id },
-    data: { hasDoc: false, docFile: null, docSize: null },
-  });
-  await log("EnvPlanEdition", id, "delete-doc", ed.docFile);
+  await prisma.envPlanDoc.delete({ where: { id } });
+  await log("EnvPlanDoc", id, "delete", doc.title);
   done();
-  return { ok: true, message: "원문을 지웠습니다." };
+  return { ok: true, message: `${doc.title} 을(를) 지웠습니다.` };
 }

@@ -19,11 +19,18 @@ export interface EditionRow {
   yearTo: number | null;
   confidence: string | null;
   isCurrent: boolean;
-  hasDoc: boolean;
-  docFile: string | null;
-  docSize: number | null;
   sourceUrl: string | null;
   note: string | null;
+  docs: DocRow[];
+}
+
+export interface DocRow {
+  id: string;
+  title: string;
+  file: string;
+  ext: string;
+  size: number;
+  sourceUrl: string | null;
 }
 
 export interface PlanRow {
@@ -49,6 +56,7 @@ export interface PlanRow {
   currentPeriod: string | null;
   editionCount: number;
   docCount: number;
+  docs: DocRow[];
   editions: EditionRow[];
 }
 
@@ -373,15 +381,14 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
                             <td className="num py-1.5 pr-3">{e.period || "—"}</td>
                             <td className="py-1.5 pr-3"><ConfBadge value={e.confidence} /></td>
                             <td className="py-1.5">
-                              {e.hasDoc && e.docFile ? (
-                                <a
-                                  href={`/docs/${encodeURIComponent(e.docFile)}`}
-                                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                                >
-                                  <FileTextIcon className="size-3.5" />
-                                  내려받기
-                                  <span className="num text-xs text-muted-foreground">{fileSize(e.docSize)}</span>
-                                </a>
+                              {e.docs.length ? (
+                                <ul className="flex flex-col gap-0.5">
+                                  {e.docs.map((d) => (
+                                    <li key={d.id}>
+                                      <DocLink doc={d} />
+                                    </li>
+                                  ))}
+                                </ul>
                               ) : (
                                 <span className="text-xs text-muted-foreground">없음</span>
                               )}
@@ -390,6 +397,27 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
                         ))}
                       </tbody>
                     </table>
+                    {p.docs.length > 0 && (
+                      <div className="mt-2 border-t pt-2">
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          계획 자료 {p.docs.length}건
+                          <span className="ml-1 font-normal">— 차수 표기가 없어 특정 차수에 붙이지 않은 원문</span>
+                        </p>
+                        <ul className="flex flex-col gap-0.5">
+                          {p.docs.map((d) => (
+                            <li key={d.id}><DocLink doc={d} /></li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {p.docCount > 0 && (
+                      <a
+                        href={`/api/plans/download?code=${p.code}`}
+                        className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <ArchiveIcon className="size-3.5" /> 이 계획 원문 {p.docCount}건 ZIP
+                      </a>
+                    )}
                     {p.note && (
                       <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">비고 — {p.note}</p>
                     )}
@@ -401,6 +429,21 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
         </ul>
       </div>
     </div>
+  );
+}
+
+function DocLink({ doc }: { doc: DocRow }) {
+  return (
+    <a
+      href={`/docs/${encodeURIComponent(doc.file)}`}
+      download={doc.title}
+      className="inline-flex items-baseline gap-1 text-primary hover:underline"
+      title={doc.title}
+    >
+      <FileTextIcon className="size-3.5 shrink-0 self-center" />
+      <span className="text-xs">{doc.title}</span>
+      <span className="num shrink-0 text-[11px] text-muted-foreground">{fileSize(doc.size)}</span>
+    </a>
   );
 }
 

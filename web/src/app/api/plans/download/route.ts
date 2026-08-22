@@ -22,17 +22,25 @@ export async function GET(req: Request) {
 
   const plans = (await getPlans()).map(toRow).filter((p) => !codes || codes.has(p.code));
 
-  const entries = plans.flatMap((p) =>
-    p.editions.flatMap((e) => {
-      if (!e.hasDoc || !e.docFile) return [];
-      const base = path.basename(e.docFile);
+  /** 파일명에 쓸 수 없는 글자를 걷어낸다 */
+  const safe = (s: string) => s.replace(/[/\\:*?"<>|]/g, "_").slice(0, 120);
+
+  const entries = plans.flatMap((p) => {
+    const folder = safe(`${p.code}_${p.name}`);
+    // 차수에 붙은 것은 차수번호를, 계획 자료는 '계획자료' 를 앞에 붙여 순서를 잡는다
+    const items = [
+      ...p.editions.flatMap((e) => e.docs.map((d) => ({ prefix: e.code, doc: d }))),
+      ...p.docs.map((d) => ({ prefix: `${p.code}_계획자료`, doc: d })),
+    ];
+    return items.flatMap(({ prefix, doc }) => {
+      const base = path.basename(doc.file);
       const abs = path.resolve(DOC_DIR, base);
-      // 경로 이탈 방지 — docFile 은 DB에서 오지만 파일 접근이므로 한 번 더 막는다
+      // 경로 이탈 방지 — file 은 DB에서 오지만 파일 접근이므로 한 번 더 막는다
       if (!abs.startsWith(DOC_DIR + path.sep)) return [];
-      const folder = `${p.code}_${p.name}`.replace(/[/\\]/g, "_");
-      return [{ name: `환경법정계획/${folder}/${e.code}_${base}`, path: abs }];
-    }),
-  );
+      // ZIP 안에서는 사람이 읽는 원 파일명을 쓴다 (저장은 파일ID로 되어 있다)
+      return [{ name: `환경법정계획/${folder}/${prefix}_${safe(doc.title)}`, path: abs }];
+    });
+  });
 
   if (!entries.length) {
     return new Response("내려받을 수 있는 원문이 없습니다.", { status: 404 });
