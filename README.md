@@ -58,7 +58,13 @@ PORT=8010 npm run dev     # /plans 공개 목록, /admin/plans 관리자
 
 담긴 데이터는 163계획 / 267차수 / 원문 165건 (수집 150 + 누락 발굴 8 + 해양수산부 소관 5).
 **차수는 반드시 한 행씩이다** — `제1~3차` 같은 묶음 표기를 쓰지 않는다.
-원문은 `python3 data/fetch-docs.py` 로 받는다 (기본은 국가계획분 1.7GB, `--all` 은 8.1GB).
+원문 180건은 세 곳에서 받는다.
+
+```bash
+python3 data/fetch-docs.py           # 국토환경정보센터 첨부 (국가계획분 165건 1.7GB, --all 은 8.1GB)
+python3 data/fetch-ministry-docs.py  # 기후에너지환경부 정책자료에서 빠진 것 보완
+python3 data/fetch-mof-docs.py       # 해양수산부 소관 해양환경 계획
+```
 자세한 것은 [web/README.md](web/README.md) 참고.
 
 ## 수집·검증 방법

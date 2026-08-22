@@ -410,14 +410,6 @@ export function PlansExplorer({ plans }: { plans: PlanRow[] }) {
                         </ul>
                       </div>
                     )}
-                    {p.docCount > 0 && (
-                      <a
-                        href={`/api/plans/download?code=${p.code}`}
-                        className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <ArchiveIcon className="size-3.5" /> 이 계획 원문 {p.docCount}건 ZIP
-                      </a>
-                    )}
                     {p.note && (
                       <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">비고 — {p.note}</p>
                     )}

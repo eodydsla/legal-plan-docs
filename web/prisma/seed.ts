@@ -147,6 +147,36 @@ async function main() {
     console.log(`  원문 파일 없음 ${missing}건 — 필요하면 python3 ../data/fetch-docs.py --all`);
   }
 
+  // 국토환경정보센터에 없어 부처 자료실에서 따로 받아 온 원문
+  // (data/fetch-ministry-docs.py 가 extra-docs.csv 를 만든다)
+  const extraPath = path.join(process.cwd(), "..", "data", "extra-docs.csv");
+  let extra = 0;
+  if (fs.existsSync(extraPath)) {
+    for (const r of parseCsv(fs.readFileSync(extraPath, "utf8"))) {
+      const planId = idByCode.get(r.plan_code);
+      const abs = path.join(DOC_DIR, r.file);
+      if (!planId || !fs.existsSync(abs) || seenFile.has(r.file)) continue;
+      seenFile.add(r.file);
+      const m = r.title.match(/제\s*(\d+)\s*차/);
+      const editionId = m ? edByPlan.get(r.plan_code)?.get(`제${m[1]}차`) ?? null : null;
+      await prisma.envPlanDoc.create({
+        data: {
+          planId,
+          editionId,
+          title: r.title,
+          file: r.file,
+          ext: r.ext || "pdf",
+          size: fs.statSync(abs).size,
+          sourceUrl: nil(r.source_url),
+          order: 90,
+        },
+      });
+      withDoc++;
+      extra++;
+    }
+    console.log(`  부처 자료실 보완 ${extra}건`);
+  }
+
   await prisma.config.createMany({
     data: [
       { key: "site_title", value: "환경분야 법정계획" },
